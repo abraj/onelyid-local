@@ -36,7 +36,8 @@
 
   "include": [
     "index.ts",
-    "packages/**/*.ts"
+    "packages/**/*.ts",
+    "generated/**/*.ts"
   ],
   "exclude": [
     "node_modules",
