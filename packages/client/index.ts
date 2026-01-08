@@ -4,7 +4,8 @@ import { isValidHandle } from '@atproto/syntax'
 import { createDb, migrateToLatest } from '#/packages/db'
 import { getOrCreateCookieSecret } from '#/packages/db/queries'
 import { createClient } from './oauth-client'
-import { getSession } from './session'
+import { createBidirectionalResolver, createIdResolver } from './id-resolver'
+import { getSession, getSessionUser } from './session'
 import { assertPath, assertPublicUrl, getConsoleLogger, getDatabasePath } from './utils'
 import { AppContext, OnelyidConfig, RespGlobals } from './types'
 import { DEFAULT_MOUNT_PATH, INVALID } from './const'
@@ -50,6 +51,7 @@ export const onelyidMiddleware = (config?: OnelyidConfig): Router => {
     logger: config?.logger ?? getConsoleLogger(),
     db: null,
     oauthClient: null,
+    resolver: null,
   };
 
   // kick off async initialization immediately
@@ -62,6 +64,9 @@ export const onelyidMiddleware = (config?: OnelyidConfig): Router => {
       if (!globals.cookieSecret) {
         globals.cookieSecret = await getOrCreateCookieSecret(ctx.db)
       }
+
+      const baseIdResolver = createIdResolver()
+      ctx.resolver = createBidirectionalResolver(baseIdResolver)
     } catch (err) {
       initError = err
     }
@@ -72,7 +77,7 @@ export const onelyidMiddleware = (config?: OnelyidConfig): Router => {
     if (initError) {
       return next(initError)
     }
-    if (!ctx.db || !globals.cookieSecret) {
+    if (!ctx.db || !globals.cookieSecret || !ctx.resolver) {
       return res.status(503).send('Service initializing')
     }
 
@@ -177,6 +182,20 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
               : "couldn't initiate login",
         })
       }
+    })
+  )
+
+  // User info for current session
+  router.get(
+    `${globals.prefixRoute}/userinfo`,
+    handler(async (req, res) => {
+      const { user, error } = await getSessionUser(req, res, ctx, globals.cookieSecret)
+      if (user === null) {
+        return res.json({ user, info: 'not logged-in' })
+      } else if (!user) {
+        return res.json({ user: null, error })
+      }
+      return res.json({ user })
     })
   )
 }

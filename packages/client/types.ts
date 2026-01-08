@@ -1,5 +1,6 @@
 import { OAuthClient } from '@atproto/oauth-client-node'
 import type { Database } from '#/packages/db';
+import type { BidirectionalResolver } from './id-resolver'
 
 export type { Database } from '../db'
 
@@ -35,4 +36,12 @@ export type AppContext = {
   logger: Logger;
   db: Database | null;
   oauthClient: OAuthClient | null;
+  resolver: BidirectionalResolver | null;
+};
+
+export type ProfileView = {
+  did: string;
+  handle: string;
+  displayName?: string;
+  avatar?: string;
 };
