@@ -170,7 +170,7 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
       // Initiate the OAuth flow
       try {
         const url = await ctx.oauthClient!.authorize(handle, {
-          scope: 'atproto transition:generic transition:email',
+          scope: 'atproto transition:email',
         })
         return res.redirect(url.toString())
       } catch (err) {
