@@ -42,6 +42,8 @@ export type AppContext = {
 export type ProfileView = {
   did: string;
   handle: string;
+  email: string;
+  emailTrusted: boolean;
   displayName?: string;
   avatar?: string;
 };

@@ -4,6 +4,7 @@ import { OAuthServerAgent } from '@atproto/oauth-client-node'
 import { getIronSession } from 'iron-session'
 import { AppContext, ProfileView, Session } from './types'
 import * as Profile from '#/generated/lexicon/types/app/bsky/actor/profile'
+import dataTrusted from '#/packages/data/trusted.json'
 
 export async function getSession(
   req: IncomingMessage,
@@ -51,14 +52,16 @@ export async function getSessionUser(
     cookieSecret: string,
 ): Promise<{ user?: ProfileView | null, error?: string }> {
   // If the user is signed in, get an agent which communicates with their server
-  const { agent } = await getSessionAgent(req, res, ctx, cookieSecret);
+  const { agent, issuer } = await getSessionAgent(req, res, ctx, cookieSecret);
 
-  if (!agent) {
+  if (!agent || !issuer) {
     return { user: null }
   }
 
-  // Fetch user's domain handle
-  const handlePr = ctx.resolver!.resolveDidToHandle(agent.assertDid);
+  const issuerTrusted = dataTrusted.trustedIssuers.includes(issuer)
+
+  // Fetch user info (current auth session)
+  const userSessionPr = agent.com.atproto.server.getSession().catch(() => undefined);
 
   // Fetch additional information about the logged-in user
   const profileResponsePr = agent.com.atproto.repo.getRecord({
@@ -67,9 +70,10 @@ export async function getSessionUser(
     rkey: 'self',
   }).catch(() => undefined);
 
-  const [handle, profileResponse] = await Promise.all([handlePr, profileResponsePr]);
+  const [userSession, profileResponse] = await Promise.all([userSessionPr, profileResponsePr]);
 
   const profileRecord = profileResponse?.data;
+  const userInfo = userSession?.data;
 
   const profile: Profile.Record | null = profileRecord &&
     Profile.isRecord(profileRecord.value) &&
@@ -77,9 +81,31 @@ export async function getSessionUser(
       ? profileRecord.value
       : null
 
+  const handle = userInfo?.handle;
+  const email = userInfo?.email;
+  const emailConfirmed = userInfo?.emailConfirmed;
+
+  // TODO: email verification in case of untrusted issuer
+  const emailTrusted = issuerTrusted;
+
+  if (!handle) {
+    const error = 'handle missing'
+    ctx.logger.error(error)
+    ctx.logger.warn('userSession:', userSession)
+    return { error }
+  }
+
+  if (!email || !emailConfirmed) {
+    const error = 'no verified email found'
+    ctx.logger.error(error)
+    return { error }
+  }
+
   const profileData: ProfileView = {
     did: agent.assertDid,
     handle,
+    email,
+    emailTrusted,
     displayName: profile?.displayName ?? '',
     avatar: 'BlobRef{ref,mimeType,size,original}', // profile.avatar
     // profile.createdAt
