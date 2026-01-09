@@ -185,6 +185,17 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
     })
   )
 
+  // Logout handler
+  // TODO: Can make it as POST later, with an info message on GET
+  router.all(
+    `${globals.prefixRoute}/logout`,
+    handler(async (req, res) => {
+      const session = await getSession(req, res, globals.cookieSecret);
+      await session.destroy()
+      return res.redirect('/')
+    })
+  )
+
   // User info for current session
   router.get(
     `${globals.prefixRoute}/userinfo`,
