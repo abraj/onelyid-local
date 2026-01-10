@@ -16,6 +16,7 @@
     "@atproto/api": "^0.18.12",
     "@atproto/identity": "^0.4.10",
     "@atproto/lexicon": "^0.6.0",
+    "@atproto/oauth-client": "^0.5.13",
     "@atproto/oauth-client-node": "^0.3.15",
     "@atproto/syntax": "^0.4.2",
     "@atproto/xrpc-server": "^0.10.7",
