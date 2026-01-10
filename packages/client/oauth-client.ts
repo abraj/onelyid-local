@@ -1,6 +1,7 @@
 import { NodeOAuthClient } from '@atproto/oauth-client-node'
 import type { AppContext, RespGlobals } from './types'
 import { SessionStore, StateStore } from './storage'
+import { sqliteRequestLock } from './lock'
 
 export const createClient = async (ctx: AppContext, globals: RespGlobals) => {
   const enc = encodeURIComponent
@@ -21,5 +22,6 @@ export const createClient = async (ctx: AppContext, globals: RespGlobals) => {
     },
     stateStore: new StateStore(ctx.db!),
     sessionStore: new SessionStore(ctx.db!),
+    requestLock: sqliteRequestLock(ctx.db!),
   })
 }

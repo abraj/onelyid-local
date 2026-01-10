@@ -17,6 +17,9 @@ importers:
       '@atproto/lexicon':
         specifier: ^0.6.0
         version: 0.6.0
+      '@atproto/oauth-client':
+        specifier: ^0.5.13
+        version: 0.5.13
       '@atproto/oauth-client-node':
         specifier: ^0.3.15
         version: 0.3.15
