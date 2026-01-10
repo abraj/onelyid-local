@@ -1,13 +1,14 @@
 import express, { type Router } from 'express'
 import { OAuthResolverError } from '@atproto/oauth-client-node'
 import { isValidHandle } from '@atproto/syntax'
-import { createDb, migrateToLatest } from '../db'
+import { createDb, migrateToLatest } from '#/packages/db'
+import { getOrCreateCookieSecret } from '#/packages/db/queries'
 import { createClient } from './oauth-client'
 import { createBidirectionalResolver, createIdResolver } from './id-resolver'
 import { getSession, getSessionUser } from './session'
-import { assertPath, assertPublicUrl } from './utils'
+import { assertPath, assertPublicUrl, getConsoleLogger, getDatabasePath } from './utils'
 import { AppContext, OnelyidConfig, RespGlobals } from './types'
-import { DEFAULT_LOCAL_PORT, DEFAULT_MOUNT_PATH, DEMO_HANDLE, INVALID } from './const'
+import { DEFAULT_MOUNT_PATH, DEMO_HANDLE, INVALID } from './const'
 
 // Helper function for defining routes
 const handler =
@@ -24,33 +25,30 @@ const handler =
     }
   }
 
-export const onelyidMiddleware = (config: OnelyidConfig): Router => {
+export const onelyidMiddleware = (config?: OnelyidConfig): Router => {
   const router = express.Router()
 
   const globals: RespGlobals = {
     // initialized on mount
+    cookieSecret: '',
     publicUrl: '',  // possibly updated on first request
-    localPort: '',
     mountPath: '',
-    baseUrl: '',
 
     // initialized on first request
+    baseUrl: '',
     prefixPath: '',
     prefixRoute: '',
     basePath: '',
   }
 
-  globals.publicUrl = assertPublicUrl(config.publicUrl);
-  globals.localPort = `${config.port ?? DEFAULT_LOCAL_PORT}`;
-  globals.mountPath = assertPath(config.mountPath);
-  globals.baseUrl = globals.publicUrl || `http://127.0.0.1${globals.localPort === '80' ? '' : `:${globals.localPort}`}`
-
-  const { dbPath, logger } = config
+  globals.cookieSecret = config?.cookieSecret ?? '';
+  globals.publicUrl = assertPublicUrl(config?.publicUrl);
+  globals.mountPath = assertPath(config?.mountPath);
 
   let initError: unknown = null
   let routesRegistered = false
   const ctx: AppContext = {
-    logger,
+    logger: config?.logger ?? getConsoleLogger(),
     db: null,
     oauthClient: null,
     resolver: null,
@@ -59,8 +57,13 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
   // kick off async initialization immediately
   ;(async () => {
     try {
+      const dbPath = config?.dbPath || getDatabasePath()
       ctx.db = createDb(dbPath)
       await migrateToLatest(ctx.db)
+
+      if (!globals.cookieSecret) {
+        globals.cookieSecret = await getOrCreateCookieSecret(ctx.db)
+      }
 
       const baseIdResolver = createIdResolver()
       ctx.resolver = createBidirectionalResolver(baseIdResolver)
@@ -74,16 +77,24 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
     if (initError) {
       return next(initError)
     }
-    if (globals.publicUrl === INVALID) {
-      return res.status(503).send('Invalid publicUrl provided! Valid example: https://example.com')
-    }
-    if (!ctx.db || !ctx.resolver) {
+    if (!ctx.db || !globals.cookieSecret || !ctx.resolver) {
       return res.status(503).send('Service initializing')
     }
 
     if (!globals.publicUrl) {
-      const detectedPublicUrl = assertPublicUrl(`${req.protocol}://${req.get('host')}`)
-      globals.publicUrl = detectedPublicUrl
+      const host = req.get('host')
+      const detectedPublicUrl = assertPublicUrl(`${req.protocol}://${host}`)
+      if (detectedPublicUrl) {
+        globals.publicUrl = detectedPublicUrl
+        globals.baseUrl = globals.publicUrl
+      } else {
+        const port = host?.split(':')[1] ?? ''
+        globals.baseUrl = `http://127.0.0.1${port === '80' ? '' : `:${port}`}`
+      }
+    }
+
+    if (globals.publicUrl === INVALID) {
+      return res.status(503).send('Invalid publicUrl provided! Valid example: https://example.com')
     }
 
     if (!globals.basePath) {
@@ -116,7 +127,7 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
   return router
 }
 
-function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, config: OnelyidConfig) {
+function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, config?: OnelyidConfig) {
   const demoHandle = DEMO_HANDLE;
 
   const login = `${globals.basePath}/login?handle=${demoHandle}`;
@@ -149,7 +160,7 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
       const params = new URLSearchParams(req.originalUrl.split('?')[1])
       try {
         const { session } = await ctx.oauthClient!.callback(params)
-        const clientSession = await getSession(req, res, config.cookieSecret);
+        const clientSession = await getSession(req, res, globals.cookieSecret);
         // assert(!clientSession.did, 'session already exists')
         clientSession.did = session.did
         await clientSession.save()
@@ -158,7 +169,7 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
         return res.redirect('/?error')
       }
 
-      const loginRedirect = assertPath(config.loginRedirect) || `${globals.prefixPath}/userinfo`
+      const loginRedirect = assertPath(config?.loginRedirect) || `${globals.prefixPath}/userinfo`
       return res.redirect(loginRedirect)
     })
   )
@@ -200,7 +211,7 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
   router.all(
     `${globals.prefixRoute}/logout`,
     handler(async (req, res) => {
-      const session = await getSession(req, res, config.cookieSecret);
+      const session = await getSession(req, res, globals.cookieSecret);
       await session.destroy()
       return res.redirect('/')
     })
@@ -210,7 +221,7 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
   router.get(
     `${globals.prefixRoute}/userinfo`,
     handler(async (req, res) => {
-      const { user, error } = await getSessionUser(req, res, ctx, config.cookieSecret)
+      const { user, error } = await getSessionUser(req, res, ctx, globals.cookieSecret)
       if (user === null) {
         return res.json({ user, try: [{ login }] })
       } else if (!user) {

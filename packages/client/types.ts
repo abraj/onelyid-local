@@ -12,18 +12,17 @@ export type Logger = {
 export type Session = { did: string }
 
 export type OnelyidConfig = {
-  dbPath: string;
-  publicUrl: string;
-  port: string | number;
-  cookieSecret: string;
-  logger: Logger;
+  dbPath?: string;
+  cookieSecret?: string;
+  publicUrl?: string;
+  logger?: Logger;
   mountPath?: string;
   loginRedirect?: string;
 }
 
 export type RespGlobals = {
+  cookieSecret: string;
   publicUrl: string;
-  localPort: string;
   mountPath: string;
   baseUrl: string;
   prefixPath: string;
