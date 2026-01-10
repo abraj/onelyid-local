@@ -8,7 +8,7 @@ import { createBidirectionalResolver, createIdResolver } from './id-resolver'
 import { getSession, getSessionUser } from './session'
 import { assertPath, assertPublicUrl, getConsoleLogger, getDatabasePath } from './utils'
 import { AppContext, OnelyidConfig, RespGlobals } from './types'
-import { DEFAULT_MOUNT_PATH, INVALID } from './const'
+import { DEFAULT_MOUNT_PATH, DEMO_HANDLE, INVALID } from './const'
 
 // Helper function for defining routes
 const handler =
@@ -128,11 +128,28 @@ export const onelyidMiddleware = (config?: OnelyidConfig): Router => {
 }
 
 function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, config?: OnelyidConfig) {
+  const demoHandle = DEMO_HANDLE;
+
+  const login = `${globals.basePath}/login?handle=${demoHandle}`;
+  const logout = `${globals.basePath}/logout`;
+  const userinfo = `${globals.basePath}/userinfo`;
+
   // OAuth metadata
   router.get(
     `${globals.prefixRoute}/client-metadata.json`,
     handler((_req, res) => {
       return res.json(ctx.oauthClient!.clientMetadata)
+    })
+  )
+
+  // Middleware root
+  router.get(
+    `${globals.prefixRoute ?? '/'}`,
+    handler((_req, res) => {
+      return res.json({
+        info: "middleware root endpoint",
+        try: [{ login, logout, userinfo }],
+      })
     })
   )
 
@@ -164,7 +181,11 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
       // Validate
       const handle = req.query.handle as string
       if (typeof handle !== 'string' || !isValidHandle(handle)) {
-        return res.json({ handle: `${handle ?? ''}`, error: 'invalid handle' })
+        return res.json({
+          handle: `${handle ?? ''}`,
+          error: 'invalid handle',
+          try: [{ login, userinfo }],
+        })
       }
 
       // Initiate the OAuth flow
@@ -202,11 +223,11 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
     handler(async (req, res) => {
       const { user, error } = await getSessionUser(req, res, ctx, globals.cookieSecret)
       if (user === null) {
-        return res.json({ user, info: 'not logged-in' })
+        return res.json({ user, info: 'not logged-in', try: [{ login, userinfo }] })
       } else if (!user) {
-        return res.json({ user: null, error })
+        return res.json({ user: null, error, try: [{ login, userinfo }] })
       }
-      return res.json({ user })
+      return res.json({ user, try: [{ logout, userinfo }] })
     })
   )
 }
