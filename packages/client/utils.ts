@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
 import net from 'node:net'
 import { Logger } from './types';
 import { INVALID } from './const';
@@ -81,4 +84,43 @@ export function assertPublicUrl(url?: string) {
   } catch(err) {
     return INVALID
   }
+}
+
+function getAppPackageName(): string | null {
+  let dir = process.cwd()
+
+  while (true) {
+    const pkgPath = path.join(dir, 'package.json')
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        return pkg.name ?? null
+      } catch {
+        return null
+      }
+    }
+
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
+  return null
+}
+
+export function getDatabasePath() {
+  let dbFile = 'database.sqlite';
+  const packageName = getAppPackageName()
+  if (packageName) {
+    dbFile = `${packageName}-${dbFile}`
+  }
+  dbFile = dbFile.replace(/\s+/g, '-');
+
+  const dir = path.join(os.homedir(), '.onelyid', 'db')
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+
+  const file = path.join(dir, dbFile)
+  return file
 }

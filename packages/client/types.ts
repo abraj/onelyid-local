@@ -12,7 +12,7 @@ export type Logger = {
 export type Session = { did: string }
 
 export type OnelyidConfig = {
-  dbPath: string;
+  dbPath?: string;
   cookieSecret: string;
   publicUrl?: string;
   logger?: Logger;
