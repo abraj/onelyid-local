@@ -24,7 +24,7 @@ const handler =
     }
   }
 
-export const onelyidMiddleware = (config: OnelyidConfig): Router => {
+export const onelyidMiddleware = (config?: OnelyidConfig): Router => {
   const router = express.Router()
 
   const globals: RespGlobals = {
@@ -40,14 +40,14 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
     basePath: '',
   }
 
-  globals.cookieSecret = config.cookieSecret ?? '';
-  globals.publicUrl = assertPublicUrl(config.publicUrl);
-  globals.mountPath = assertPath(config.mountPath);
+  globals.cookieSecret = config?.cookieSecret ?? '';
+  globals.publicUrl = assertPublicUrl(config?.publicUrl);
+  globals.mountPath = assertPath(config?.mountPath);
 
   let initError: unknown = null
   let routesRegistered = false
   const ctx: AppContext = {
-    logger: config.logger ?? getConsoleLogger(),
+    logger: config?.logger ?? getConsoleLogger(),
     db: null,
     oauthClient: null,
   };
@@ -55,7 +55,7 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
   // kick off async initialization immediately
   ;(async () => {
     try {
-      const dbPath = config.dbPath || getDatabasePath()
+      const dbPath = config?.dbPath || getDatabasePath()
       ctx.db = createDb(dbPath)
       await migrateToLatest(ctx.db)
 
@@ -122,7 +122,7 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
   return router
 }
 
-function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, config: OnelyidConfig) {
+function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, config?: OnelyidConfig) {
   // OAuth metadata
   router.get(
     `${globals.prefixRoute}/client-metadata.json`,
@@ -147,7 +147,7 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
         return res.redirect('/?error')
       }
 
-      const loginRedirect = assertPath(config.loginRedirect) || `${globals.prefixPath}/userinfo`
+      const loginRedirect = assertPath(config?.loginRedirect) || `${globals.prefixPath}/userinfo`
       return res.redirect(loginRedirect)
     })
   )
