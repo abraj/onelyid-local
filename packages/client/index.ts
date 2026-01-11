@@ -2,6 +2,7 @@ import express, { type Router } from 'express'
 import { OAuthResolverError } from '@atproto/oauth-client-node'
 import { isValidHandle } from '@atproto/syntax'
 import { createDb, migrateToLatest } from '#/packages/db'
+import { getOrCreateCookieSecret } from '#/packages/db/queries'
 import { createClient } from './oauth-client'
 import { getSession } from './session'
 import { assertPath, assertPublicUrl, getConsoleLogger, getDatabasePath } from './utils'
@@ -28,6 +29,7 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
 
   const globals: RespGlobals = {
     // initialized on mount
+    cookieSecret: '',
     publicUrl: '',  // possibly updated on first request
     mountPath: '',
 
@@ -38,6 +40,7 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
     basePath: '',
   }
 
+  globals.cookieSecret = config.cookieSecret ?? '';
   globals.publicUrl = assertPublicUrl(config.publicUrl);
   globals.mountPath = assertPath(config.mountPath);
 
@@ -55,6 +58,10 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
       const dbPath = config.dbPath || getDatabasePath()
       ctx.db = createDb(dbPath)
       await migrateToLatest(ctx.db)
+
+      if (!globals.cookieSecret) {
+        globals.cookieSecret = await getOrCreateCookieSecret(ctx.db)
+      }
     } catch (err) {
       initError = err
     }
@@ -65,7 +72,7 @@ export const onelyidMiddleware = (config: OnelyidConfig): Router => {
     if (initError) {
       return next(initError)
     }
-    if (!ctx.db) {
+    if (!ctx.db || !globals.cookieSecret) {
       return res.status(503).send('Service initializing')
     }
 
@@ -131,7 +138,7 @@ function registerRoutes(router: Router, ctx: AppContext, globals: RespGlobals, c
       const params = new URLSearchParams(req.originalUrl.split('?')[1])
       try {
         const { session } = await ctx.oauthClient!.callback(params)
-        const clientSession = await getSession(req, res, config.cookieSecret);
+        const clientSession = await getSession(req, res, globals.cookieSecret);
         // assert(!clientSession.did, 'session already exists')
         clientSession.did = session.did
         await clientSession.save()

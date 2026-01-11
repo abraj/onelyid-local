@@ -13,7 +13,7 @@ export type Session = { did: string }
 
 export type OnelyidConfig = {
   dbPath?: string;
-  cookieSecret: string;
+  cookieSecret?: string;
   publicUrl?: string;
   logger?: Logger;
   mountPath?: string;
@@ -21,6 +21,7 @@ export type OnelyidConfig = {
 }
 
 export type RespGlobals = {
+  cookieSecret: string;
   publicUrl: string;
   mountPath: string;
   baseUrl: string;
